@@ -1,0 +1,174 @@
+GitHub Analyzer Backend — Progress Summary (Days 3–5)
+
+============================================================ DAY 3 –
+USER MODULE & AUTHENTICATION FOUNDATION
+============================================================
+
+User Model - Extended Django’s AbstractUser. - Switched authentication
+to email-based login. - Kept username for uniqueness/display purposes. -
+Added GitHub-related fields: - github_id - github_username
+
+Database Design Decisions - email -> unique=True and indexed. -
+github_id: - BigIntegerField - Nullable - Unique when present. -
+github_username: - CharField - Nullable - Unique when present.
+
+Authentication Decisions - USERNAME_FIELD = “email” - REQUIRED_FIELDS =
+[“username”]
+
+Other Decisions - Used BigAutoField for primary keys. - Decided to keep
+username instead of removing it. - GitHub fields remain optional until
+the user links their GitHub account.
+
+============================================================ DAY 4 –
+REPOSITORY MODULE DESIGN
+============================================================
+
+Repository Model
+
+Fields: - id - user (ForeignKey) - github_repo_id - github_owner -
+repository_name - default_branch - created_at
+
+Important Decisions
+
+1.  Unique Constraint
+
+-   UNIQUE(user, github_repo_id)
+-   Same repository can be imported by multiple users.
+-   Same user cannot import the same repository twice.
+
+2.  GitHub Repository ID
+
+-   Stored github_repo_id as the source of truth instead of relying on
+    repository URLs.
+
+3.  Default Branch
+
+-   Stored default_branch because repositories may use main, master,
+    develop, etc.
+
+4.  Clone URL
+
+-   Decided not to store clone URLs.
+-   They can always be reconstructed or fetched from GitHub.
+
+5.  Relationship Naming
+
+-   Used related_name=“repositories”
+-   Enables: user.repositories.all()
+
+Architecture Planned
+
+Serializer ↓ View ↓ Service ↓ Model
+
+Business logic was planned to stay inside the service layer.
+
+============================================================ DAY 5 –
+REPOSITORY IMPORT FEATURE
+============================================================
+
+Repository Import Workflow
+
+Client ↓ Serializer ↓ View ↓ GitHubService ↓ GitHub REST API ↓
+PostgreSQL ↓ Serializer ↓ Response
+
+Serializers
+
+RepositoryImportSerializer - Validates GitHub URL. - Validates GitHub
+domain. - Validates owner/repository format.
+
+RepositorySerializer - Serializes Repository model for API responses.
+
+Service Layer
+
+Created GitHubService with:
+
+Public Method - import_repository(user, github_url)
+
+Private Helpers - _parse_repository_url() - _fetch_repository() -
+_check_duplicate() - _save_repository()
+
+GitHub Integration
+
+-   Used urlparse() to extract:
+    -   github_owner
+    -   repository_name
+-   Supported only HTTP/HTTPS GitHub URLs.
+-   Called: https://api.github.com/repos/{owner}/{repository}
+-   Retrieved:
+    -   github_repo_id
+    -   github_owner
+    -   repository_name
+    -   default_branch
+
+Custom Exceptions
+
+-   RepositoryNotFound
+-   RepositoryPrivate
+-   GitHubTimeout
+-   GitHubRateLimit
+-   GitHubServerError
+-   GitHubConnectionError
+-   GitHubRequestError
+-   UnexpectedGitHubResponse
+
+Planned a global exception handler for future scalability.
+
+Duplicate Detection
+
+Workflow: - Check if repository already exists. - Return existing
+repository if found. - Otherwise save a new repository. - Handled race
+conditions using IntegrityError.
+
+View Responsibilities
+
+-   Validate serializer.
+-   Call GitHubService.
+-   Return response.
+-   No business logic inside the view.
+
+Authentication
+
+-   Configured JWT Authentication.
+-   Protected APIs using IsAuthenticated.
+-   Generated Access and Refresh tokens.
+-   Successfully authenticated requests.
+
+API Endpoint
+
+POST /api/repositories/import/
+
+End-to-End Testing
+
+Successfully verified: - JWT Authentication - GitHub API integration -
+PostgreSQL insertion - Repository import - Duplicate detection
+
+============================================================ MAJOR
+ARCHITECTURAL DECISIONS
+============================================================
+
+-   Adopted layered architecture: Serializer → View → Service → Model
+-   Business logic resides in the service layer.
+-   Used serializers for both request validation and response
+    serialization.
+-   Used GitHub repository ID as the unique identifier.
+-   Returned (repository, created) from the service similar to Django’s
+    get_or_create().
+-   Services remain independent of HTTP.
+-   Planned centralized exception handling.
+-   Followed the Single Responsibility Principle across all layers.
+
+============================================================ PROJECT
+STATUS AFTER DAY 5
+============================================================
+
+Completed
+
+Authentication ✓ Custom User Model ✓ Email-based login ✓ JWT
+Authentication
+
+Repository Module ✓ Repository model ✓ Repository import API ✓ GitHub
+API integration ✓ Duplicate detection ✓ Protected endpoint
+
+Architecture ✓ Service Layer ✓ Serializer Layer ✓ View Layer ✓ Business
+Exceptions ✓ Clean project structure
+

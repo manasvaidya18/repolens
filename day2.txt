@@ -1,0 +1,926 @@
+# GitHub Engineering Intelligence Platform
+
+# Day 2 - Backend Architecture & System Design
+
+---
+
+# Goal of Day 2
+
+Today's objective was not to write code.
+
+Instead, we focused on designing the complete backend workflow before implementation.
+
+The guiding principle was:
+
+> "Understand why every component exists before writing a single line of code."
+
+---
+
+# 1. API Design Philosophy
+
+We decided that every API will be designed before implementation.
+
+For every endpoint we should know:
+
+* Request
+* Validation
+* Database Queries
+* Business Logic
+* Response
+* Failure Cases
+* Status Codes
+* Retry Behaviour
+
+Only after understanding these points will implementation begin.
+
+---
+
+# 2. Registration API
+
+Endpoint
+
+POST /register
+
+---
+
+## Complete Flow
+
+Receive Request
+
+↓
+
+Validate Input
+
+↓
+
+Check Duplicate Email
+
+↓
+
+Hash Password
+
+↓
+
+Insert User
+
+↓
+
+Return Response
+
+---
+
+## Validation
+
+Perform before touching PostgreSQL.
+
+Checks include
+
+* Required Fields
+* Username not blank
+* Username length
+* Email format
+* Password length
+* Password strength
+
+Reason
+
+Avoid unnecessary database calls.
+
+---
+
+## Duplicate Email
+
+Query
+
+Search by email.
+
+Reason
+
+Email is unique.
+
+The UNIQUE index on email makes lookup efficient.
+
+---
+
+## Race Condition
+
+Scenario
+
+Two users register simultaneously using the same email.
+
+Both execute
+
+SELECT
+
+↓
+
+Both think email is available
+
+↓
+
+Both INSERT
+
+Solution
+
+PostgreSQL UNIQUE constraint.
+
+Only one insert succeeds.
+
+The second request receives
+
+409 Conflict
+
+Lesson
+
+Application validation improves user experience.
+
+Database constraints guarantee correctness.
+
+---
+
+## Password Storage
+
+Never store plain passwords.
+
+Store only password hashes.
+
+Password verification is performed by comparing the entered password with the stored hash.
+
+---
+
+## Response
+
+Chosen Approach
+
+Register first.
+
+User logs in separately.
+
+Reason
+
+Separation of responsibilities.
+
+Registration creates users.
+
+Login performs authentication.
+
+---
+
+# 3. Login API
+
+Endpoint
+
+POST /login
+
+---
+
+## Flow
+
+Receive Request
+
+↓
+
+Validate Request
+
+↓
+
+Find User by Email
+
+↓
+
+Verify Password Hash
+
+↓
+
+Generate Tokens
+
+↓
+
+Update Last Login
+
+↓
+
+Return Response
+
+---
+
+## Security Decision
+
+Never reveal whether an email exists.
+
+Instead of
+
+"Email does not exist"
+
+Always return
+
+"Invalid email or password"
+
+Reason
+
+Prevent user enumeration attacks.
+
+---
+
+## Failed Login Protection
+
+Options Discussed
+
+* Permanent Lock
+* CAPTCHA
+* Rate Limiting
+
+Chosen Direction
+
+Rate limiting
+
+*
+
+CAPTCHA after repeated failures
+
+Reason
+
+Avoid denial-of-service attacks while maintaining good user experience.
+
+---
+
+## Temporary Data
+
+Failed login attempts should not be stored in PostgreSQL.
+
+Reason
+
+Large number of writes.
+
+Instead
+
+Redis
+
+will store
+
+failed_attempts
+
+with expiration time.
+
+---
+
+# 4. Import Repository API
+
+Endpoint
+
+POST /repositories/import
+
+---
+
+## Validation
+
+Performed before contacting GitHub.
+
+Checks
+
+* Empty URL
+* URL Length
+* GitHub Domain
+* Repository URL Format
+
+Only after local validation
+
+↓
+
+GitHub API
+
+---
+
+## GitHub Validation
+
+Check
+
+* Repository Exists
+* Repository Visibility
+* Repository Size
+* Default Branch
+
+---
+
+## Private Repositories
+
+Current MVP
+
+Supports
+
+Public Repositories Only
+
+Reason
+
+GitHub OAuth is not implemented.
+
+Future Version
+
+GitHub OAuth
+
+↓
+
+Access Token
+
+↓
+
+Private Repository Support
+
+---
+
+# 5. Repository Import Timing
+
+Question
+
+When should Repository be inserted?
+
+Decision
+
+Immediately after successful validation.
+
+Repository status
+
+IMPORTING
+
+Reason
+
+Users immediately see imported repositories.
+
+Dashboard can display progress.
+
+---
+
+# 6. Repository Status
+
+Repository status values
+
+IMPORTING
+
+READY
+
+ANALYZING
+
+FAILED
+
+Reason
+
+Repository lifecycle becomes visible.
+
+---
+
+# 7. Repository Versioning
+
+Important Design Decision
+
+Analysis is tied to
+
+Commit SHA
+
+Not Repository URL.
+
+Reason
+
+Repositories change.
+
+A repository URL alone cannot uniquely identify analyzed code.
+
+---
+
+## Analysis Flow
+
+Repository
+
+↓
+
+Latest Commit
+
+↓
+
+Compare
+
+↓
+
+Already analyzed?
+
+↓
+
+Yes
+
+Return Previous Report
+
+↓
+
+No
+
+Create New Analysis
+
+---
+
+# 8. Re-analysis
+
+Question
+
+User clicks
+
+Re-analyze
+
+Decision
+
+Step 1
+
+Fetch latest commit from GitHub.
+
+Compare with latest analyzed commit.
+
+If identical
+
+↓
+
+Return previous report.
+
+No analysis required.
+
+If different
+
+↓
+
+Create new AnalysisJob.
+
+Create new AnalysisResult.
+
+Preserve previous reports.
+
+---
+
+## Why Preserve History?
+
+Benefits
+
+* Compare versions
+* Track maintainability changes
+* Track complexity changes
+* AI model comparison
+* Better auditing
+
+Future
+
+Retention policy may delete very old reports.
+
+---
+
+# 9. Background Processing
+
+Question
+
+Should Django analyze repositories?
+
+Decision
+
+No.
+
+Responsibilities
+
+Django
+
+* Authentication
+* Validation
+* Database
+* Job Creation
+
+Celery
+
+* Execute Jobs
+
+FastAPI
+
+* Repository Analysis
+* AI Processing
+* Parsing
+
+Reason
+
+Long-running tasks should never block HTTP requests.
+
+---
+
+## Complete Flow
+
+React
+
+↓
+
+Django
+
+↓
+
+PostgreSQL
+
+↓
+
+Redis
+
+↓
+
+Celery Worker
+
+↓
+
+FastAPI
+
+↓
+
+PostgreSQL
+
+↓
+
+React
+
+---
+
+# 10. Power Failure
+
+Question
+
+What happens if power is lost?
+
+---
+
+## RAM
+
+Temporary
+
+Everything disappears.
+
+---
+
+## PostgreSQL
+
+Persistent
+
+Committed data survives.
+
+---
+
+## Decision
+
+If worker crashes
+
+↓
+
+Retry Analysis
+
+Reason
+
+Repository analysis is deterministic.
+
+Repeating work is acceptable.
+
+---
+
+# 11. Saving Results Failure
+
+Scenario
+
+Analysis completed.
+
+Database crashes before saving.
+
+---
+
+Case 1
+
+Worker survives.
+
+Retry INSERT.
+
+---
+
+Case 2
+
+Worker crashes.
+
+Entire analysis reruns.
+
+---
+
+## Duplicate Prevention
+
+AnalysisResult
+
+analysis_job_id
+
+UNIQUE
+
+Reason
+
+Retrying the same job cannot create duplicate reports.
+
+---
+
+# 12. Idempotency
+
+Concept Learned
+
+Systems should tolerate retries.
+
+Repeated execution should produce one final result.
+
+Reason
+
+Distributed systems cannot assume exactly-once execution.
+
+---
+
+# 13. Polling vs WebSockets
+
+Requirement
+
+Notify user when analysis finishes.
+
+Options
+
+* Polling
+* WebSockets
+* SSE
+* Refresh
+
+Chosen
+
+Polling
+
+Every few seconds.
+
+Reason
+
+Simple
+
+Reliable
+
+Low complexity
+
+Perfect for MVP.
+
+---
+
+## Polling Flow
+
+React
+
+↓
+
+GET Status
+
+↓
+
+RUNNING
+
+↓
+
+Wait
+
+↓
+
+GET Status
+
+↓
+
+COMPLETED
+
+↓
+
+Fetch Report
+
+---
+
+# 14. Progress Tracking
+
+Question
+
+Should progress be stored in PostgreSQL?
+
+Decision
+
+No.
+
+Reason
+
+Progress is temporary.
+
+Example
+
+45%
+
+↓
+
+46%
+
+↓
+
+47%
+
+Repeated database updates are wasteful.
+
+---
+
+## Redis Stores
+
+* Progress
+* Rate Limits
+* Login Attempts
+* Queue State
+* Temporary Cache
+
+---
+
+## PostgreSQL Stores
+
+* Users
+* Repositories
+* Analysis Jobs
+* Analysis Results
+* AI Reports
+* Historical Data
+
+---
+
+# 15. Temporary vs Persistent Data
+
+Important Principle
+
+Question
+
+"If the server restarts, do I care if this data disappears?"
+
+If YES
+
+↓
+
+PostgreSQL
+
+If NO
+
+↓
+
+Redis
+
+---
+
+# 16. Engineering Principles Learned
+
+## Validate Early
+
+Perform cheap validation before database queries.
+
+---
+
+## Database Is Final Authority
+
+Application validation improves UX.
+
+Database constraints guarantee correctness.
+
+---
+
+## Never Trust Application Alone
+
+Critical business rules belong in the database.
+
+---
+
+## Separate Responsibilities
+
+Django
+
+Web APIs
+
+FastAPI
+
+AI Engine
+
+Redis
+
+Temporary State
+
+PostgreSQL
+
+Persistent State
+
+Celery
+
+Background Execution
+
+---
+
+## Design Around Data Lifetime
+
+Persistent Data
+
+↓
+
+PostgreSQL
+
+Temporary State
+
+↓
+
+Redis
+
+---
+
+## Idempotent Systems
+
+Operations should be safe to retry.
+
+---
+
+## Background Jobs
+
+HTTP requests should remain fast.
+
+Heavy work belongs to background workers.
+
+---
+
+## History Is Valuable
+
+Never overwrite analysis reports.
+
+Each report represents a snapshot of a repository at a specific commit.
+
+---
+
+## Query Before Work
+
+Compare commit SHA before analyzing.
+
+Avoid unnecessary computation.
+
+---
+
+## Failure Is Expected
+
+Instead of preventing failures,
+
+design systems that recover safely.
+
+---
+
+# Architecture Decisions Made Today
+
+✓ Registration Flow
+
+✓ Login Flow
+
+✓ Security Strategy
+
+✓ Rate Limiting
+
+✓ CAPTCHA Strategy
+
+✓ Repository Validation
+
+✓ Public Repository Support
+
+✓ Repository Lifecycle
+
+✓ Commit-based Versioning
+
+✓ Re-analysis Logic
+
+✓ Background Processing
+
+✓ Celery Responsibilities
+
+✓ FastAPI Responsibilities
+
+✓ Retry Strategy
+
+✓ Idempotency
+
+✓ Polling Strategy
+
+✓ Redis Usage
+
+✓ PostgreSQL Usage
+
+✓ Temporary vs Persistent Data
+
+✓ Failure Recovery
+
+---
+
+# Day 2 Outcome
+
+At the end of Day 2, the complete backend architecture has been finalized.
+
+Every major workflow—from user authentication to repository import, background analysis, retry handling, progress tracking, and result storage—has been designed along with its tradeoffs and failure scenarios.
+
+The implementation phase can now begin with a clear understanding of:
+
+* the responsibilities of each service,
+* how data flows through the system,
+* where temporary versus persistent state belongs,
+* how failures are handled,
+* and why each architectural decision was made.
+
+No implementation details are left ambiguous enough to block development.

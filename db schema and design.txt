@@ -1,0 +1,681 @@
+# GitHub Engineering Intelligence Platform
+
+## Day 1 – System Design & Database Design
+
+**Project Duration:** 8 Days
+
+**Objective:**
+Build an AI-powered platform that analyzes GitHub repositories, generates engineering insights, and demonstrates strong software engineering concepts such as asynchronous processing, caching, database design, and system architecture.
+
+---
+
+# 1. Product Vision
+
+The platform is not intended to be another AI chatbot.
+
+Its goal is to become an engineering assistant capable of analyzing GitHub repositories and providing useful software engineering insights.
+
+Initially, the platform will support:
+
+* User Authentication
+* Repository Import
+* Repository Analysis
+* AI Generated Architecture Summary
+* Engineering Metrics
+* Repository Dashboard
+
+The emphasis is on building a well-engineered backend rather than adding numerous features.
+
+---
+
+# 2. Engineering Principles
+
+The following principles were agreed upon during the design discussion.
+
+## Build for Current Requirements
+
+Avoid adding functionality simply because it might be useful later.
+
+Example:
+
+We will **not** store file-level metrics because the dashboard currently only displays repository-level statistics.
+
+If future requirements demand file-level insights, a new table can be introduced.
+
+This follows the **YAGNI (You Aren't Gonna Need It)** principle.
+
+---
+
+## Separate Responsibilities
+
+Each database entity should have a single responsibility.
+
+For example,
+
+Repository should only describe the repository.
+
+It should **not** store
+
+* Complexity
+* Security Score
+* AI Summary
+* Analysis Status
+
+Those belong to AnalysisResult.
+
+---
+
+## Preserve History
+
+Historical information should never be overwritten.
+
+Each new analysis creates a new AnalysisResult.
+
+This allows
+
+* Comparison over time
+* AI model improvements
+* Prompt version comparison
+* Auditability
+
+---
+
+# 3. High Level Architecture
+
+```text
+                React Frontend
+
+                       │
+
+        ┌──────────────┴──────────────┐
+
+        │                             │
+
+     Django API                 FastAPI Analysis Service
+
+        │                             │
+
+        │                             │
+
+   PostgreSQL                 AI + Static Analysis
+
+        │
+
+        ▼
+
+      Redis
+
+        │
+
+        ▼
+
+   Celery Worker
+
+        │
+
+        ▼
+
+   Temporary Git Clone
+```
+
+---
+
+## Why Django?
+
+Responsible for
+
+* Authentication
+* User Management
+* Repository Management
+* ORM
+* Admin Panel
+
+Reason:
+
+Django already provides mature authentication and ORM support.
+
+---
+
+## Why FastAPI?
+
+Responsible for
+
+* Heavy repository analysis
+* AI operations
+* AST parsing
+* CPU intensive processing
+
+Reason:
+
+Keeps computational work isolated from the main application.
+
+---
+
+## Why Redis?
+
+Redis will later be used for
+
+* Caching
+* Rate Limiting
+* Queue backend
+
+Reason:
+
+Avoid repeated expensive operations.
+
+---
+
+## Why Celery?
+
+Repository analysis is a long-running operation.
+
+Instead of making the user wait,
+
+analysis will execute asynchronously.
+
+---
+
+# 4. Database Design
+
+## Entity 1 : User
+
+Represents a user registered on our platform.
+
+### Attributes
+
+| Field           | Notes                   |
+| --------------- | ----------------------- |
+| id              | Primary Key             |
+| username        | Display name            |
+| email           | Unique login email      |
+| password_hash   | Encrypted password      |
+| github_id       | Optional GitHub account |
+| github_username | Optional                |
+| avatar_url      | Optional                |
+| created_at      | Creation timestamp      |
+| last_login      | Last login timestamp    |
+| deleted_at      | Soft delete timestamp   |
+
+---
+
+### Decisions
+
+Primary Key
+
+* id
+
+Reason:
+
+Primary keys should never change.
+
+Email can change.
+
+Using id prevents cascading updates.
+
+---
+
+Email
+
+Unique
+
+Not Null
+
+Reason:
+
+Used for authentication.
+
+---
+
+GitHub ID
+
+Nullable
+
+Unique
+
+Reason:
+
+Users may use the platform without connecting GitHub.
+
+Once connected,
+
+one GitHub account can belong to only one platform user.
+
+---
+
+Soft Delete
+
+Instead of deleting users,
+
+store
+
+deleted_at
+
+Reason
+
+* Restore accidentally deleted accounts.
+* Preserve historical analysis data.
+* Better auditing.
+
+---
+
+Indexes
+
+Automatic indexes
+
+* id
+* email
+* github_id
+
+No manual index planned for username.
+
+---
+
+# Entity 2 : Repository
+
+Represents a repository imported by one user.
+
+Not simply a GitHub repository.
+
+---
+
+### Relationship
+
+One User
+
+↓
+
+Many Repositories
+
+---
+
+### Attributes
+
+| Field          | Notes                   |
+| -------------- | ----------------------- |
+| id             | Primary Key             |
+| owner_id       | FK → User               |
+| github_repo_id | GitHub Repository ID    |
+| name           | Repository Name         |
+| full_name      | owner/repository        |
+| description    | Nullable                |
+| github_url     | Repository URL          |
+| clone_url      | Git Clone URL           |
+| default_branch | Usually main            |
+| visibility     | Public / Private        |
+| language       | Primary Language        |
+| stars          | GitHub Stars            |
+| forks          | GitHub Forks            |
+| created_at     | Imported timestamp      |
+| last_synced    | Metadata sync timestamp |
+
+---
+
+### Decisions
+
+Repository belongs to one user.
+
+Different users may import the same GitHub repository.
+
+Therefore
+
+Composite Unique Constraint
+
+(owner_id, github_repo_id)
+
+Reason
+
+Prevent duplicate imports by the same user while allowing different users to import the same repository.
+
+---
+
+Store GitHub Metadata
+
+Instead of calling GitHub every time,
+
+store
+
+* Stars
+* Forks
+* Language
+* Description
+
+Reason
+
+* Better performance
+* Lower API usage
+* Works when GitHub is unavailable
+
+Metadata can later be refreshed periodically.
+
+---
+
+Repository Storage
+
+Repositories are
+
+NOT
+
+stored permanently.
+
+Flow
+
+Clone
+
+↓
+
+Analyze
+
+↓
+
+Delete
+
+Reason
+
+* Saves disk space
+* Simpler infrastructure
+* Suitable for MVP
+
+---
+
+Repository Size Limit
+
+Large repositories will initially be rejected.
+
+Reason
+
+Prevent a single analysis job from monopolizing worker resources.
+
+Future versions can support
+
+* Incremental analysis
+* Distributed workers
+* Priority queues
+
+---
+
+# Entity 3 : AnalysisJob
+
+Represents one analysis request.
+
+Not one retry.
+
+---
+
+### Attributes
+
+| Field           | Notes                           |
+| --------------- | ------------------------------- |
+| id              | Primary Key                     |
+| repository_id   | FK                              |
+| status          | queued/running/completed/failed |
+| retry_count     | Current retry count             |
+| max_retries     | Default 3                       |
+| timeout_seconds | Default timeout                 |
+| queued_at       | Queue timestamp                 |
+| started_at      | Processing timestamp            |
+| finished_at     | Completion timestamp            |
+| worker_id       | Worker identifier               |
+| error_message   | Failure message                 |
+
+---
+
+### Decisions
+
+One AnalysisJob
+
+=
+
+One User Request
+
+Retries do not create new jobs.
+
+Instead
+
+retry_count
+
+is incremented.
+
+---
+
+Timeout
+
+Jobs exceeding timeout
+
+↓
+
+Marked Failed
+
+Reason
+
+Prevent indefinitely running workers.
+
+---
+
+Concurrent Analysis
+
+Rule
+
+Only one active analysis
+
+per Repository
+
+at a time.
+
+If another request arrives
+
+↓
+
+Return Conflict
+
+Reason
+
+Avoid duplicate processing.
+
+---
+
+Rate Limiting
+
+Will be added later.
+
+Purpose
+
+Prevent abuse and resource exhaustion.
+
+---
+
+# Entity 4 : AnalysisResult
+
+Stores completed analysis output.
+
+---
+
+### Attributes
+
+| Field                 | Notes                 |
+| --------------------- | --------------------- |
+| id                    | Primary Key           |
+| job_id                | FK                    |
+| total_files           | Files analyzed        |
+| total_lines           | Physical lines        |
+| code_lines            | Executable lines      |
+| blank_lines           | Blank lines           |
+| comment_lines         | Comments              |
+| total_functions       | Count                 |
+| total_classes         | Count                 |
+| avg_complexity        | Repository complexity |
+| duplicate_percentage  | Duplicate code        |
+| dependency_count      | Imports / Packages    |
+| security_score        | Score                 |
+| maintainability_score | Score                 |
+| documentation_score   | Score                 |
+| architecture_summary  | AI Summary            |
+| suggestions           | JSON                  |
+| analyzed_at           | Timestamp             |
+| ai_model              | Model used            |
+| prompt_version        | Prompt version        |
+| analysis_version      | Engine version        |
+
+---
+
+### Decisions
+
+Repository-level metrics only.
+
+No file-level metrics.
+
+Reason
+
+Current dashboard does not require them.
+
+Avoid unnecessary complexity.
+
+---
+
+History
+
+Each new analysis creates
+
+a new AnalysisResult.
+
+Nothing is overwritten.
+
+Reason
+
+Maintain complete analysis history.
+
+---
+
+Suggestions
+
+Stored as JSON.
+
+Reason
+
+Frontend always consumes the entire report.
+
+No requirement exists to query individual suggestions.
+
+Simpler implementation.
+
+---
+
+# 5. Concepts Learned
+
+During Day 1 the following engineering concepts were discussed.
+
+## Primary Key vs Business Key
+
+Use immutable IDs as primary keys.
+
+Business attributes like email should remain unique but not serve as primary keys.
+
+---
+
+## Composite Unique Constraint
+
+(owner_id, github_repo_id)
+
+Used to enforce repository uniqueness per user.
+
+---
+
+## Indexes
+
+Purpose
+
+Speed up frequently executed queries.
+
+Tradeoff
+
+* Faster Reads
+* Slower Writes
+* Additional Storage
+
+Automatic indexes
+
+* Primary Keys
+* Unique Fields
+
+---
+
+## Normalization
+
+Separate entities according to responsibility.
+
+Avoid unnecessary joins.
+
+---
+
+## Denormalization
+
+Store GitHub metadata locally.
+
+Reason
+
+Performance.
+
+---
+
+## Append-Only Design
+
+Historical analyses are preserved.
+
+Never overwrite analysis history.
+
+---
+
+## Race Conditions
+
+Simultaneous requests can violate business rules.
+
+Application logic and database constraints must prevent duplicate active analyses.
+
+---
+
+## Rate Limiting
+
+Protects the platform from abuse.
+
+Will later be implemented using Redis.
+
+---
+
+## Background Processing
+
+Repository analysis should execute asynchronously.
+
+The web application should remain responsive.
+
+---
+
+## YAGNI
+
+Do not build features until they are required.
+
+Avoid premature optimization and unnecessary abstraction.
+
+---
+
+# 6. Pending Topics
+
+To be completed on Day 2.
+
+* Database access patterns
+* API endpoint design
+* Query optimization
+* Foreign key delete behavior
+* Complete ER Diagram
+* Django model implementation
+* Service interaction flow
+* Authentication workflow
+* Repository analysis workflow
+
+---
+
+# Day 1 Outcome
+
+At the end of Day 1, the entire database architecture and the fundamental engineering decisions for the project have been established.
+
+No code has been written yet.
+
+The focus has been on designing a maintainable, extensible, and interview-ready backend architecture that balances simplicity with sound engineering principles.
