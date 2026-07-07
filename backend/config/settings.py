@@ -135,3 +135,5 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ),
 }
+
+ANALYSIS_ENGINE_VERSION = "1.0.0"

@@ -39,6 +39,7 @@ urlpatterns = [
         TokenRefreshView.as_view(),
         name="token_refresh",
     ),
+    path("api/analysis/", include("apps.analysis.urls")),
 
     
 ]
