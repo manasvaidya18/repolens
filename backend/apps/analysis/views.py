@@ -2,7 +2,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from django.shortcuts import get_object_or_404
+from .models import AnalysisJob
 from .exceptions import (
     ActiveAnalysisExists,
     RepositoryNotFound,
@@ -67,3 +68,21 @@ class StartAnalysisView(APIView):
             },
             status=status.HTTP_202_ACCEPTED,
         )
+    
+class AnalysisDetailView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, job_id):
+
+        analysis_job = get_object_or_404(
+            AnalysisJob,
+            id=job_id,
+            repository__user=request.user,
+        )
+
+        serializer = AnalysisJobSerializer(
+            analysis_job
+        )
+
+        return Response(serializer.data)   

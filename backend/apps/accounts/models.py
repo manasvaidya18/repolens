@@ -3,22 +3,38 @@ from django.contrib.auth.models import AbstractUser
 
 
 class User(AbstractUser):
-    
-    email = models.EmailField(unique=True)
+
+    email = models.EmailField(
+        unique=True
+    )
+
+    email_verified = models.BooleanField(
+        default=False
+    )
+
+    email_verification_token = (
+        models.CharField(
+            max_length=255,
+            null=True,
+            blank=True,
+        )
+    )
 
     github_id = models.BigIntegerField(
-    unique=True,
-    null=True,
-    blank=True,
+        unique=True,
+        null=True,
+        blank=True,
     )
+
     github_username = models.CharField(
-    max_length=255,
-    unique=True,
-    blank=True,
-    null=True,
-)
-    
+        max_length=255,
+        unique=True,
+        blank=True,
+        null=True,
+    )
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
+
     def __str__(self):
         return self.email

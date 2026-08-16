@@ -1,0 +1,132 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f4f6f8;
+}
+.app {
+  max-width: 700px;
+  margin: 50px auto;
+  padding: 20px;
+}
+.title {
+  text-align: center;
+  margin-bottom: 40px;
+}
+.repo-input {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+
+  border: 1px solid #ccc;
+  border-radius: 8px;
+
+  box-sizing: border-box;
+
+  margin-bottom: 20px;
+}
+
+.analyze-btn {
+  width: 100%;
+
+  padding: 12px;
+
+  font-size: 16px;
+  font-weight: bold;
+
+  border: none;
+  border-radius: 8px;
+
+  cursor: pointer;
+
+  background-color: #2563eb;
+  color: white;
+
+  margin-bottom: 20px;
+}
+
+.analyze-btn:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+.status-card {
+  background-color: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-gray {
+  color: gray;
+}
+
+.status-yellow {
+  color: goldenrod;
+}
+
+.status-blue {
+  color: blue 
+}
+
+.status-purple {
+  color: purple;
+}
+
+.status-orange {
+  color: orange;
+}
+
+.status-green {
+  color: green;
+}
+.error-message {
+  color: red;
+  margin-top: -10px;
+  margin-bottom: 15px;
+}
+.auth-container {
+  max-width: 400px;
+  margin: 100px auto;
+  padding: 30px;
+
+  background-color: white;
+
+  border-radius: 12px;
+
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.auth-container h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.auth-container form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.auth-container input {
+  padding: 12px;
+  font-size: 16px;
+
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.auth-container button[type="submit"] {
+  padding: 12px;
+
+  border: none;
+  border-radius: 8px;
+
+  background-color: #2563eb;
+  color: white;
+
+  cursor: pointer;
+}
+
+.auth-container p {
+  text-align: center;
+  margin-top: 20px;
+}

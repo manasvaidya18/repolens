@@ -2,10 +2,13 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.generics import ListAPIView
 from .serializers import (
     RepositoryImportSerializer,
     RepositorySerializer,
 )
+from .models import Repository
+from .serializers import RepositorySerializer
 from .services import (
     GitHubService,
     RepositoryNotFound,
@@ -110,3 +113,12 @@ class RepositoryImportView(APIView):
                 else status.HTTP_200_OK
             ),
         )
+class RepositoryListView(ListAPIView):
+
+    serializer_class = RepositorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Repository.objects.filter(
+        user=self.request.user
+        ).order_by("-created_at")

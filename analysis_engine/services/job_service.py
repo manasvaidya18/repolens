@@ -73,3 +73,14 @@ class JobService:
         job.completed_at = datetime.now(timezone.utc)
 
         await session.commit()
+
+    @classmethod
+    async def mark_indexing_complete(
+        cls,
+    session: AsyncSession,
+    job: AnalysisJob,
+    ) -> None:
+
+        job.status = "ANALYZING"
+
+        await session.commit()
