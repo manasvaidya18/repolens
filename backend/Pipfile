@@ -10,6 +10,8 @@ python-decouple = "*"
 djangorestframework-simplejwt = "*"
 django = "<5.3,>=5.2"
 requests = "*"
+django-cors-headers = "*"
+sendgrid = "*"
 
 [dev-packages]
 

@@ -132,6 +132,25 @@ class GitManager:
         local_path,
         branch,
         )
+
+    @classmethod
+    def get_tracked_files(
+        cls,
+        local_path: Path,
+        ) -> list[Path]:
+
+        output = cls._run_git_command(
+            local_path,
+            "ls-files",
+        )
+
+        if not output:
+            return []
+
+        return [
+        Path(line)
+        for line in output.splitlines()
+        ]
     @classmethod
     def _run_git_command(
         cls,
